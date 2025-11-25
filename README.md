@@ -4,8 +4,18 @@ ESLint plugin to prefer the shortest import path, automatically choosing between
 
 ## Installation
 
+This package is published to GitHub Packages.
+
+First, configure npm to use GitHub Packages for the `@marqhq` scope by adding to your `.npmrc`:
+
+```
+@marqhq:registry=https://npm.pkg.github.com
+```
+
+Then install:
+
 ```bash
-npm install eslint-plugin-shortest-import --save-dev
+npm install @marqhq/eslint-plugin-shortest-import --save-dev
 ```
 
 ## Usage
@@ -13,15 +23,15 @@ npm install eslint-plugin-shortest-import --save-dev
 ### ESLint Flat Config (eslint.config.js)
 
 ```javascript
-import shortestImport from "eslint-plugin-shortest-import";
+import shortestImport from "@marqhq/eslint-plugin-shortest-import";
 
 export default [
   {
     plugins: {
-      "shortest-import": shortestImport,
+      "@marqhq/shortest-import": shortestImport,
     },
     rules: {
-      "shortest-import/shortest-import": "warn",
+      "@marqhq/shortest-import/shortest-import": "warn",
     },
   },
 ];
@@ -31,9 +41,9 @@ export default [
 
 ```json
 {
-  "plugins": ["shortest-import"],
+  "plugins": ["@marqhq/shortest-import"],
   "rules": {
-    "shortest-import/shortest-import": "warn"
+    "@marqhq/shortest-import/shortest-import": "warn"
   }
 }
 ```
@@ -41,7 +51,7 @@ export default [
 ## Rule Options
 
 ```javascript
-"shortest-import/shortest-import": ["warn", {
+"@marqhq/shortest-import/shortest-import": ["warn", {
   "tsconfigPath": "./tsconfig.json" // Optional: path to tsconfig.json
 }]
 ```
@@ -111,6 +121,27 @@ eslint --fix src/
 - ESLint >= 8.0.0
 - TypeScript >= 4.0.0
 - A `tsconfig.json` with `paths` configured
+
+## Development
+
+### Setup
+
+```bash
+npm install
+npm run build
+npm test
+```
+
+### Releasing
+
+To publish a new version:
+
+1. Update the version in `package.json`
+2. Commit the change: `git commit -am "Bump version to x.x.x"`
+3. Create and push a tag: `git tag vx.x.x && git push origin vx.x.x`
+4. Create a GitHub release: `gh release create vx.x.x --title "vx.x.x" --notes "Release notes here"`
+
+The GitHub Action will automatically build, test, and publish to GitHub Packages.
 
 ## License
 
