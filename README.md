@@ -42,9 +42,21 @@ export default [
 
 ```javascript
 "@marqhq/shortest-import/shortest-import": ["warn", {
-  "tsconfigPath": "./tsconfig.json" // Optional: path to tsconfig.json
+  "tsconfigPath": "./tsconfig.json", // Optional: path to tsconfig.json
+  "preferOnTie": "alias" // Optional: "alias" | "relative" | "keep" (default: "keep")
 }]
 ```
+
+### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `tsconfigPath` | `string` | `./tsconfig.json` | Path to your tsconfig.json file |
+| `preferOnTie` | `"alias"` \| `"relative"` \| `"keep"` | `"keep"` | What to prefer when segment counts are equal |
+
+- `"alias"` - On tie, convert to the tsconfig path alias
+- `"relative"` - On tie, convert to the relative import
+- `"keep"` - On tie, keep the current import style (default)
 
 ## How It Works
 

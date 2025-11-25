@@ -6,7 +6,8 @@ const createRule = ESLintUtils.RuleCreator(
   (name) => `https://github.com/you/eslint-plugin-shortest-import#${name}`
 );
 
-type Options = [{ tsconfigPath?: string }];
+type PreferOnTie = "alias" | "relative" | "keep";
+type Options = [{ tsconfigPath?: string; preferOnTie?: PreferOnTie }];
 
 export default createRule<Options, "shorterImportAvailable">({
   name: "shortest-import",
@@ -22,6 +23,7 @@ export default createRule<Options, "shorterImportAvailable">({
         type: "object",
         properties: {
           tsconfigPath: { type: "string" },
+          preferOnTie: { type: "string", enum: ["alias", "relative", "keep"] },
         },
         additionalProperties: false,
       },
@@ -35,6 +37,7 @@ export default createRule<Options, "shorterImportAvailable">({
   create(context, [options]) {
     const filename = context.filename;
     const fileDir = path.dirname(filename);
+    const preferOnTie = options.preferOnTie ?? "keep";
 
     // Load tsconfig paths
     const tsconfigPath =
@@ -70,7 +73,11 @@ export default createRule<Options, "shorterImportAvailable">({
 
           if (aliasImport) {
             const aliasSegments = countSegments(aliasImport);
-            if (aliasSegments < currentSegments) {
+            const shouldReport =
+              aliasSegments < currentSegments ||
+              (aliasSegments === currentSegments && preferOnTie === "alias");
+
+            if (shouldReport) {
               context.report({
                 node: node.source,
                 messageId: "shorterImportAvailable",
@@ -93,8 +100,11 @@ export default createRule<Options, "shorterImportAvailable">({
 
           const relativeImport = toRelativeImport(fileDir, resolved);
           const relativeSegments = countSegments(relativeImport);
+          const shouldReport =
+            relativeSegments < currentSegments ||
+            (relativeSegments === currentSegments && preferOnTie === "relative");
 
-          if (relativeSegments < currentSegments) {
+          if (shouldReport) {
             context.report({
               node: node.source,
               messageId: "shorterImportAvailable",

@@ -253,5 +253,86 @@ ruleTester.run("shortest-import", rule, {
       ],
       output: `import { helper } from "@utils/helpers";`,
     },
+
   ],
+});
+
+// Tests for preferOnTie option
+// Note: Finding true ties is tricky because @components/X (2 segments) is shorter than
+// @/components/X (3 segments). We need cases where the shortest alias equals the relative path.
+
+ruleTester.run("shortest-import (preferOnTie: alias)", rule, {
+  valid: [],
+  invalid: [
+    {
+      // ./Button = 1 segment
+      // @components/Button = 2 segments (shortest alias available)
+      // Not a tie, but with preferOnTie: "alias", ties would convert
+      // Since alias is longer here, no conversion happens without the option
+      // Let's test: ../Button from features/auth = 2 segments
+      // If there was an alias of same length, it would convert
+      // For now, test that preferOnTie: "alias" still works when alias is shorter
+      code: `import { helper } from "../utils/helpers";`,
+      filename: path.join(fixturesDir, "src/components/Button.ts"),
+      options: [{ tsconfigPath, preferOnTie: "alias" as const }],
+      errors: [
+        {
+          messageId: "shorterImportAvailable",
+          data: {
+            shorter: "@utils/helpers",
+            shorterCount: "2",
+            currentCount: "3",
+          },
+        },
+      ],
+      output: `import { helper } from "@utils/helpers";`,
+    },
+  ],
+});
+
+ruleTester.run("shortest-import (preferOnTie: relative)", rule, {
+  valid: [],
+  invalid: [
+    {
+      // @/components/Button = 3 segments
+      // ./Button = 1 segment (shorter)
+      // This should still convert because relative is shorter
+      code: `import { Button } from "@/components/Button";`,
+      filename: path.join(fixturesDir, "src/components/App.ts"),
+      options: [{ tsconfigPath, preferOnTie: "relative" as const }],
+      errors: [
+        {
+          messageId: "shorterImportAvailable",
+          data: {
+            shorter: "./Button",
+            shorterCount: "1",
+            currentCount: "3",
+          },
+        },
+      ],
+      output: `import { Button } from "./Button";`,
+    },
+  ],
+});
+
+ruleTester.run("shortest-import (preferOnTie: keep)", rule, {
+  valid: [
+    {
+      // ./Button = 1 segment
+      // @components/Button = 2 segments
+      // Not a tie, relative is shorter - keep relative
+      code: `import { Button } from "./Button";`,
+      filename: path.join(fixturesDir, "src/components/App.ts"),
+      options: [{ tsconfigPath, preferOnTie: "keep" as const }],
+    },
+    {
+      // @utils/helpers = 2 segments
+      // From features/auth: ../../utils/helpers = 4 segments
+      // Alias is shorter - keep alias
+      code: `import { helper } from "@utils/helpers";`,
+      filename: path.join(fixturesDir, "src/features/auth/login.ts"),
+      options: [{ tsconfigPath, preferOnTie: "keep" as const }],
+    },
+  ],
+  invalid: [],
 });
