@@ -4,16 +4,6 @@ ESLint plugin to prefer the shortest import path, automatically choosing between
 
 ## Installation
 
-This package is published to GitHub Packages.
-
-First, configure npm to use GitHub Packages for the `@marqhq` scope by adding to your `.npmrc`:
-
-```
-@marqhq:registry=https://npm.pkg.github.com
-```
-
-Then install:
-
 ```bash
 npm install @marqhq/eslint-plugin-shortest-import --save-dev
 ```

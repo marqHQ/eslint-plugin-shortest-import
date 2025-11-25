@@ -1,6 +1,6 @@
 {
   "name": "@marqhq/eslint-plugin-shortest-import",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "ESLint plugin to prefer the shortest import path (relative vs alias)",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -8,7 +8,7 @@
     "dist"
   ],
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "access": "public"
   },
   "repository": {
     "type": "git",
