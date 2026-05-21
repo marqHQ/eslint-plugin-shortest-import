@@ -1,6 +1,6 @@
 {
   "name": "@marqhq/eslint-plugin-shortest-import",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "ESLint plugin to prefer the shortest import path (relative vs alias)",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
