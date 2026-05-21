@@ -4,6 +4,9 @@ import rule from "../src/rules/shortest-import";
 
 const fixturesDir = path.join(__dirname, "fixtures");
 const tsconfigPath = path.join(fixturesDir, "tsconfig.json");
+// Separate tsconfig with a 2-char alias (`@x`) so first-segment ties with `..`
+// become reachable for testing the shortest-first-segment fallback chain.
+const tieTsconfigPath = path.join(fixturesDir, "tsconfig.tie.json");
 
 const ruleTester = new RuleTester({
   languageOptions: {
@@ -335,4 +338,193 @@ ruleTester.run("shortest-import (preferOnTie: keep)", rule, {
     },
   ],
   invalid: [],
+});
+
+// =============================================================================
+// shortest-first-segment tie-breaker
+// =============================================================================
+// On a segment-count tie, the alias and the relative form differ only in their
+// first segment (alias prefix vs `..`). `shortest-first-segment` flags the form
+// with the longer first segment, so single-char prefixes like `@` win on tie
+// and noisy prefixes like `@components` lose to `..`.
+
+ruleTester.run("shortest-import (preferOnTie: shortest-first-segment)", rule, {
+  valid: [
+    {
+      // Relative input where the alias has a LONGER first segment.
+      // From src/components/Button.ts -> @components/Button = 2 segments
+      // ../../components/Button from anywhere outside components is longer,
+      // but the same-dir case ./Button = 1 segment wins outright.
+      // Use a true tie where relative wins: ../helpers from src/utils/sub/file.ts
+      // matches @utils/helpers (2 segs each). First seg: @utils (6) vs .. (2)
+      // -> relative wins -> don't flag the relative.
+      code: `import { helpers } from "../helpers";`,
+      filename: path.join(fixturesDir, "src/utils/sub/file.ts"),
+      options: [
+        { tsconfigPath, preferOnTie: "shortest-first-segment" as const },
+      ],
+    },
+    {
+      // Alias input where the alias has a SHORTER first segment.
+      // @/features/auth/login = 4 segments
+      // From src/components/Button.ts: ../features/auth/login = 4 segments
+      // First seg: @ (1) vs .. (2) -> alias wins -> don't flag the alias.
+      code: `import { login } from "@/features/auth/login";`,
+      filename: path.join(fixturesDir, "src/components/Button.ts"),
+      options: [
+        { tsconfigPath, preferOnTie: "shortest-first-segment" as const },
+      ],
+    },
+    {
+      // Unresolved first-segment tie (both 2 chars) -> implicit keep.
+      // @x/helpers = 2 segments, ../helpers = 2 segments
+      // First seg: @x (2) vs .. (2) -> tied -> chain exhausted -> no flag.
+      code: `import { helpers } from "../helpers";`,
+      filename: path.join(fixturesDir, "src/utils/sub/file.ts"),
+      options: [
+        {
+          tsconfigPath: tieTsconfigPath,
+          preferOnTie: "shortest-first-segment" as const,
+        },
+      ],
+    },
+  ],
+  invalid: [
+    {
+      // Relative input where the alias has a SHORTER first segment.
+      // @/features/auth/login = 4 segments, ../features/auth/login = 4 segments
+      // First seg: @ (1) < .. (2) -> alias wins -> flag, convert.
+      code: `import { login } from "../features/auth/login";`,
+      filename: path.join(fixturesDir, "src/components/Button.ts"),
+      options: [
+        { tsconfigPath, preferOnTie: "shortest-first-segment" as const },
+      ],
+      errors: [
+        {
+          messageId: "shorterImportAvailable",
+          data: {
+            shorter: "@/features/auth/login",
+            shorterCount: "4",
+            currentCount: "4",
+          },
+        },
+      ],
+      output: `import { login } from "@/features/auth/login";`,
+    },
+    {
+      // Alias input where the alias has a LONGER first segment.
+      // @utils/helpers = 2 segments, ../helpers = 2 segments (from utils/sub/)
+      // First seg: @utils (6) > .. (2) -> relative wins -> flag, convert.
+      code: `import { helpers } from "@utils/helpers";`,
+      filename: path.join(fixturesDir, "src/utils/sub/file.ts"),
+      options: [
+        { tsconfigPath, preferOnTie: "shortest-first-segment" as const },
+      ],
+      errors: [
+        {
+          messageId: "shorterImportAvailable",
+          data: {
+            shorter: "../helpers",
+            shorterCount: "2",
+            currentCount: "2",
+          },
+        },
+      ],
+      output: `import { helpers } from "../helpers";`,
+    },
+  ],
+});
+
+// =============================================================================
+// preferOnTie as an array: fallback chain
+// =============================================================================
+// The chain is walked left-to-right. Each entry that resolves the tie wins;
+// `"shortest-first-segment"` is the only entry that can fall through (when first
+// segments are equal length). `"keep"` (or end-of-chain) means no flag.
+
+ruleTester.run("shortest-import (preferOnTie: array fallback)", rule, {
+  valid: [
+    {
+      // Unresolved first-segment tie + `"keep"` fallback -> no flag.
+      // Equivalent to bare "shortest-first-segment".
+      code: `import { helpers } from "../helpers";`,
+      filename: path.join(fixturesDir, "src/utils/sub/file.ts"),
+      options: [
+        {
+          tsconfigPath: tieTsconfigPath,
+          preferOnTie: ["shortest-first-segment", "keep"] as const,
+        },
+      ],
+    },
+    {
+      // Same case with `"relative"` fallback: relative input is already
+      // relative, so no flag.
+      code: `import { helpers } from "../helpers";`,
+      filename: path.join(fixturesDir, "src/utils/sub/file.ts"),
+      options: [
+        {
+          tsconfigPath: tieTsconfigPath,
+          preferOnTie: ["shortest-first-segment", "relative"] as const,
+        },
+      ],
+    },
+    {
+      // `"alias"` fallback with alias input that's already alias -> no flag.
+      code: `import { helpers } from "@x/helpers";`,
+      filename: path.join(fixturesDir, "src/utils/sub/file.ts"),
+      options: [
+        {
+          tsconfigPath: tieTsconfigPath,
+          preferOnTie: ["shortest-first-segment", "alias"] as const,
+        },
+      ],
+    },
+  ],
+  invalid: [
+    {
+      // First-segment tie (@x vs ..) falls through to `"alias"` -> convert.
+      code: `import { helpers } from "../helpers";`,
+      filename: path.join(fixturesDir, "src/utils/sub/file.ts"),
+      options: [
+        {
+          tsconfigPath: tieTsconfigPath,
+          preferOnTie: ["shortest-first-segment", "alias"] as const,
+        },
+      ],
+      errors: [
+        {
+          messageId: "shorterImportAvailable",
+          data: {
+            shorter: "@x/helpers",
+            shorterCount: "2",
+            currentCount: "2",
+          },
+        },
+      ],
+      output: `import { helpers } from "@x/helpers";`,
+    },
+    {
+      // First-segment tie falls through to `"relative"`; alias input flips
+      // to relative form.
+      code: `import { helpers } from "@x/helpers";`,
+      filename: path.join(fixturesDir, "src/utils/sub/file.ts"),
+      options: [
+        {
+          tsconfigPath: tieTsconfigPath,
+          preferOnTie: ["shortest-first-segment", "relative"] as const,
+        },
+      ],
+      errors: [
+        {
+          messageId: "shorterImportAvailable",
+          data: {
+            shorter: "../helpers",
+            shorterCount: "2",
+            currentCount: "2",
+          },
+        },
+      ],
+      output: `import { helpers } from "../helpers";`,
+    },
+  ],
 });

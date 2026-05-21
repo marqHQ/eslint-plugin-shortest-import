@@ -3,11 +3,23 @@ import { ESLintUtils } from "@typescript-eslint/utils";
 import { loadConfig, createMatchPath } from "tsconfig-paths";
 
 const createRule = ESLintUtils.RuleCreator(
-  (name) => `https://github.com/you/eslint-plugin-shortest-import#${name}`
+  (name) => `https://github.com/marqHQ/eslint-plugin-shortest-import#${name}`
 );
 
-type PreferOnTie = "alias" | "relative" | "keep";
+type TieBreaker =
+  | "alias"
+  | "relative"
+  | "keep"
+  | "shortest-first-segment";
+type PreferOnTie = TieBreaker | TieBreaker[];
 type Options = [{ tsconfigPath?: string; preferOnTie?: PreferOnTie }];
+
+const TIE_BREAKER_VALUES: TieBreaker[] = [
+  "alias",
+  "relative",
+  "keep",
+  "shortest-first-segment",
+];
 
 export default createRule<Options, "shorterImportAvailable">({
   name: "shortest-import",
@@ -23,7 +35,15 @@ export default createRule<Options, "shorterImportAvailable">({
         type: "object",
         properties: {
           tsconfigPath: { type: "string" },
-          preferOnTie: { type: "string", enum: ["alias", "relative", "keep"] },
+          preferOnTie: {
+            oneOf: [
+              { type: "string", enum: TIE_BREAKER_VALUES },
+              {
+                type: "array",
+                items: { type: "string", enum: TIE_BREAKER_VALUES },
+              },
+            ],
+          },
         },
         additionalProperties: false,
       },
@@ -37,7 +57,9 @@ export default createRule<Options, "shorterImportAvailable">({
   create(context, [options]) {
     const filename = context.filename;
     const fileDir = path.dirname(filename);
-    const preferOnTie = options.preferOnTie ?? "keep";
+    const tieChain: TieBreaker[] = Array.isArray(options.preferOnTie)
+      ? options.preferOnTie
+      : [options.preferOnTie ?? "keep"];
 
     // Load tsconfig paths
     const tsconfigPath =
@@ -75,7 +97,8 @@ export default createRule<Options, "shorterImportAvailable">({
             const aliasSegments = countSegments(aliasImport);
             const shouldReport =
               aliasSegments < currentSegments ||
-              (aliasSegments === currentSegments && preferOnTie === "alias");
+              (aliasSegments === currentSegments &&
+                resolveTie(aliasImport, source, tieChain) === "alias");
 
             if (shouldReport) {
               context.report({
@@ -102,7 +125,8 @@ export default createRule<Options, "shorterImportAvailable">({
           const relativeSegments = countSegments(relativeImport);
           const shouldReport =
             relativeSegments < currentSegments ||
-            (relativeSegments === currentSegments && preferOnTie === "relative");
+            (relativeSegments === currentSegments &&
+              resolveTie(source, relativeImport, tieChain) === "relative");
 
           if (shouldReport) {
             context.report({
@@ -123,6 +147,41 @@ export default createRule<Options, "shorterImportAvailable">({
     };
   },
 });
+
+// Walks the tie-breaker chain until one returns "alias" or "relative".
+// `"keep"` (or end-of-chain) yields null = don't flag. `"shortest-first-segment"`
+// can fall through to the next breaker when first segments are equal length.
+function resolveTie(
+  aliasImport: string,
+  relativeImport: string,
+  chain: TieBreaker[]
+): "alias" | "relative" | null {
+  for (const breaker of chain) {
+    if (breaker === "keep") return null;
+    if (breaker === "alias") return "alias";
+    if (breaker === "relative") return "relative";
+    if (breaker === "shortest-first-segment") {
+      const aLen = firstSegment(aliasImport).length;
+      const rLen = firstSegment(relativeImport).length;
+      if (aLen < rLen) return "alias";
+      if (rLen < aLen) return "relative";
+      // first segments are equal length — fall through to next breaker
+    }
+  }
+  return null;
+}
+
+// On a segment-count tie, the two import forms always have an identical tail —
+// the only difference is the first segment (alias prefix like `@` / `@foo` vs
+// the relative `..`). Comparing first-segment length captures the intuition
+// that short alias prefixes are "free" while long ones add visual noise.
+function firstSegment(importPath: string): string {
+  const segments = importPath
+    .replace(/^\.\//, "")
+    .split("/")
+    .filter((s) => s && s !== ".");
+  return segments[0] ?? "";
+}
 
 function countSegments(importPath: string): number {
   // Count meaningful segments - each directory level counts

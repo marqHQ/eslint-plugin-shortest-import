@@ -42,8 +42,9 @@ export default [
 
 ```javascript
 "@marqhq/shortest-import/shortest-import": ["warn", {
-  "tsconfigPath": "./tsconfig.json", // Optional: path to tsconfig.json
-  "preferOnTie": "alias" // Optional: "alias" | "relative" | "keep" (default: "keep")
+  "tsconfigPath": "./tsconfig.json",        // Optional: path to tsconfig.json
+  "preferOnTie": "alias"                    // Optional: single value, or...
+  // "preferOnTie": ["shortest-first-segment", "alias"]  // ...a fallback chain
 }]
 ```
 
@@ -52,11 +53,35 @@ export default [
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `tsconfigPath` | `string` | `./tsconfig.json` | Path to your tsconfig.json file |
-| `preferOnTie` | `"alias"` \| `"relative"` \| `"keep"` | `"keep"` | What to prefer when segment counts are equal |
+| `preferOnTie` | `TieBreaker \| TieBreaker[]` | `"keep"` | How to resolve segment-count ties; an array is a fallback chain |
 
-- `"alias"` - On tie, convert to the tsconfig path alias
-- `"relative"` - On tie, convert to the relative import
-- `"keep"` - On tie, keep the current import style (default)
+#### Tie-breaker values
+
+- `"alias"` — convert to the tsconfig path alias
+- `"relative"` — convert to the relative import
+- `"keep"` — keep the current import style
+- `"shortest-first-segment"` — compare first-segment length; convert to whichever side has the shorter first segment. May leave a tie unresolved (e.g., `@a` vs `..`, both 2 chars), in which case the next entry in the chain is consulted
+
+#### Fallback chains
+
+Pass an array to chain tie-breakers. Each entry is consulted left-to-right; the first one that resolves the tie wins. `"keep"` (or end-of-chain) means "don't flag." `"alias"` and `"relative"` always resolve, so anything after them is unreachable.
+
+Examples:
+
+```javascript
+// Bare heuristic: short alias prefixes win, long ones lose, unresolved ties keep.
+preferOnTie: "shortest-first-segment"
+
+// Heuristic, but always resolve: prefer alias on the unresolvable `@a` vs `..` tie.
+preferOnTie: ["shortest-first-segment", "alias"]
+
+// Heuristic, fall back to relative on unresolved ties.
+preferOnTie: ["shortest-first-segment", "relative"]
+```
+
+#### Why `shortest-first-segment` works
+
+When two import forms tie on segment count and resolve to the same file, their tails are necessarily identical — the only difference is the first segment (the alias prefix vs. `..`). So comparing first-segment length captures the intuition that short prefixes like `@/` are "free" while long prefixes like `@components/` add visual noise that a plain `../` doesn't.
 
 ## How It Works
 
